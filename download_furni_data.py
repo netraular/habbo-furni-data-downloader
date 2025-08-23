@@ -1,20 +1,11 @@
-# download_furni.py
+# dependencies/habbo-furni-data-downloader/download_furni_data.py
 
 import requests
 import json
 import time
-import os
-from config import API_TOKEN # Import the token from the new config file
+from pathlib import Path
 
-# --- CONFIGURATION ---
-BASE_URL = "https://habbofurni.com/api/v1"
-HEADERS = {
-    "Authorization": f"Bearer {API_TOKEN}",
-    "Accept": "application/json"
-}
-OUTPUT_DIR = "habbo_furni_data"
-
-# --- LIST OF HOTELS (from the API documentation) ---
+# --- LIST OF HOTELS (se mantiene para ser importada) ---
 HOTELS = [
     {"id": 1, "name": "Habbo.com", "short_name": "COM"},
     {"id": 2, "name": "Habbo Brazil", "short_name": "COM.BR"},
@@ -28,10 +19,16 @@ HOTELS = [
     {"id": 10, "name": "Habbo Sandbox", "short_name": "Sandbox"},
 ]
 
-def download_furni_by_hotel(hotel):
+def download_furni_by_hotel(hotel, api_token: str, output_dir: Path):
     """
     Downloads all furni data for a specific hotel, handling pagination.
     """
+    BASE_URL = "https://habbofurni.com/api/v1"
+    HEADERS = {
+        "Authorization": f"Bearer {api_token}",
+        "Accept": "application/json"
+    }
+
     hotel_id = hotel["id"]
     hotel_name = hotel["name"]
     print(f"\n--- Starting download for hotel: {hotel_name} (ID: {hotel_id}) ---")
@@ -44,8 +41,8 @@ def download_furni_by_hotel(hotel):
     try:
         print("Fetching pagination info...")
         params = {"per_page": 100, "page": 1}
-        response = requests.get(f"{BASE_URL}/furniture", headers=hotel_headers, params=params)
-        response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
+        response = requests.get(f"{BASE_URL}/furniture", headers=hotel_headers, params=params, timeout=15)
+        response.raise_for_status()
         
         data = response.json()
         total_pages = data["meta"]["last_page"]
@@ -56,73 +53,28 @@ def download_furni_by_hotel(hotel):
         
     except requests.exceptions.RequestException as e:
         print(f"❌ Error on initial request for hotel {hotel_name}: {e}")
-        return
+        return False
 
-    # Loop through the rest of the pages
     for page in range(2, total_pages + 1):
         try:
             print(f"Downloading page {page} of {total_pages}...")
             params["page"] = page
-            response = requests.get(f"{BASE_URL}/furniture", headers=hotel_headers, params=params)
+            response = requests.get(f"{BASE_URL}/furniture", headers=hotel_headers, params=params, timeout=15)
             response.raise_for_status()
             page_data = response.json()["data"]
             all_furni_data.extend(page_data)
-            time.sleep(0.5) # Be polite to the API, wait half a second between requests
+            time.sleep(0.5)
         except requests.exceptions.RequestException as e:
             print(f"⚠️ Error downloading page {page} for {hotel_name}: {e}. Skipping page.")
             continue
             
-    # Save all the collected data to a JSON file
     if all_furni_data:
         file_name = f"{hotel['short_name'].replace('.', '_')}_furnis.json"
-        file_path = os.path.join(OUTPUT_DIR, file_name)
+        file_path = output_dir / file_name
         
         print(f"Saving {len(all_furni_data)} furni to file: {file_path}")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(all_furni_data, f, indent=2, ensure_ascii=False)
         print(f"✔️ Download complete for {hotel_name}!")
-
-def show_menu():
-    """Displays the interactive menu and handles user selection."""
-    while True:
-        print("\n" + "="*50)
-        print("    Select which hotel you want to download data for")
-        print("="*50)
-        for i, hotel in enumerate(HOTELS):
-            print(f" [{i+1}] {hotel['name']}")
-        print("----------------------------------------------------")
-        print(" [0] Download data for ALL hotels")
-        print(" [Q] Quit")
-        print("="*50)
-
-        choice = input("Enter your choice and press Enter: ").strip().lower()
-
-        if choice == 'q':
-            print("Exiting the program. Goodbye!")
-            break
-        
-        try:
-            choice_num = int(choice)
-            if choice_num == 0:
-                print("You have selected to download ALL hotels. This may take a while...")
-                for hotel in HOTELS:
-                    download_furni_by_hotel(hotel)
-                print("\n🎉 Process completed for all hotels.")
-            elif 1 <= choice_num <= len(HOTELS):
-                selected_hotel = HOTELS[choice_num - 1]
-                download_furni_by_hotel(selected_hotel)
-            else:
-                print("❌ Invalid option. Please choose a number from the list.")
-        except ValueError:
-            print("❌ Invalid input. Please enter a number or 'Q' to quit.")
-
-if __name__ == "__main__":
-    # Check if the API token is configured before running
-    if not API_TOKEN or API_TOKEN == "YOUR_BEARER_TOKEN_HERE":
-        print("❌ ERROR: API_TOKEN is not configured in 'config.py'.")
-        print("Please edit 'config.py' and add your token before running the script.")
-    else:
-        # Create the output directory if it doesn't exist
-        if not os.path.exists(OUTPUT_DIR):
-            os.makedirs(OUTPUT_DIR)
-        show_menu()
+    
+    return True

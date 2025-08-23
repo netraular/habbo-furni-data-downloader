@@ -1,128 +1,124 @@
-# Habbo Furni Data Downloader & Processor
+# Habbo Furni & Asset Pipeline
 
-This project provides a set of Python scripts to download and process Habbo Hotel furni data using the public API from [HabboFurni.com](https://habbofurni.com/).
+This project provides a set of Python scripts to download Habbo Hotel furni metadata from the [HabboFurni.com](https://habbofurni.com/) API, process it into a structured database, and optionally download the associated SWF and icon image assets.
 
 ## Data Source
 
-The data is sourced directly from the HabboFurni API, which provides comprehensive information about furniture across multiple hotels.
+The metadata is sourced directly from the HabboFurni API, which provides comprehensive information about furniture across multiple hotels. The asset files (SWFs, PNGs) are downloaded from the URLs provided within that metadata.
 
 *(Screenshot of the HabboFurni.com website)*
-![HabboFurni.com Website Screenshot](docs/images/habbofurni_screenshot.png)
+
 
 ## Features
 
--   **Interactive Downloader**: Interactively choose which hotel's data to download (or download from all of them).
+-   **Complete Pipeline**: An orchestrator script (`main.py`) runs all steps in sequence.
 -   **Data Enrichment**: Combines furni data from the `.COM` (English) and `.ES` (Spanish) hotels to create a bilingual dataset.
--   **Structured Output**: Automatically organizes each processed furni into its own folder, identified by its `classname`, making individual data easy to access.
--   **Secure Configuration**: Keeps your API token in a separate configuration file to avoid exposing it in the main scripts.
+-   **Structured Output**: Organizes each furni into its own folder, containing a `data.json` file with its merged metadata.
+-   **Optional Asset Downloading**: By default, the script only prepares the metadata. You can enable SWF and/or icon downloading with simple flags.
+-   **Flexible & Configurable**: Use command-line arguments to specify custom output directories and to skip steps you've already completed.
+-   **Secure Configuration**: Uses a `.env` file to keep your API token safe and out of version control.
 
 ## Project Structure
 
 ```
 .
-├── docs/
-│   └── images/
-│       └── habbofurni_screenshot.png
-├── habbo_furni_data/
-├── furni_database/
-├── config.py
-├── download_furni.py
-├── process_furni.py
+├── .env                  # Your secret API token (you create this)
+├── assets/               # Default output folder
+│   ├── metadata_raw/     # Output of Step 1: Raw JSON files
+│   └── furni_database/   # Output of Step 2 & 3: Processed folders with assets
+├── dependencies/
+│   └── habbo-furni-data-downloader/
+│       ├── download_furni_data.py
+│       └── process_furni.py
+├── download_assets.py
+├── main.py               # The main script to run the pipeline
 ├── requirements.txt
 └── README.md
 ```
 
 ## Installation
 
-1.  **Clone or download this repository.**
+1.  **Clone this repository.**
+    ```bash
+    git clone <repository_url>
+    cd <repository_folder>
+    ```
 
-2.  **Ensure you have Python 3 installed.**
+2.  **Ensure you have Python 3.8+ installed.**
 
-3.  **Install the required dependencies using the `requirements.txt` file.**
-    Open a terminal in the project's root folder and run the following command. This will automatically install `requests` and any other necessary libraries.
+3.  **Install the required dependencies using `pip`.**
+    In the project's root folder, run:
     ```bash
     pip install -r requirements.txt
     ```
 
 ## Configuration
 
-Before you can use the scripts, you must configure your API token.
+Before running the pipeline, you must configure your HabboFurni API token.
 
 1.  **Get your API token** from your account on [HabboFurni.com](https://habbofurni.com/).
-2.  **Open the `config.py` file**.
-3.  **Replace the placeholder text `"YOUR_BEARER_TOKEN_HERE"`** with your actual token.
+2.  **Create a file named `.env`** in the root directory of the project.
+3.  **Add your token to the `.env` file** in the following format:
 
-    ```python
-    # in config.py
-    API_TOKEN = "eyJ0eXAi...your_full_token_here"
     ```
-
-4.  **(Optional but Recommended)** If you are using Git, add `config.py` to your `.gitignore` file to prevent accidentally committing your secret credentials to a public repository.
+    # in .env file
+    HABBOFURNI_API_TOKEN="eyJ0eXAi...your_full_token_here"
+    ```
 
 ## Usage
 
-### Step 1: Download the Data (`download_furni.py`)
+The entire pipeline is controlled by `main.py`. By default, it will only download and process metadata. You must explicitly enable asset downloading.
 
-This script connects to the API and downloads furni information from your chosen hotel. To use the `process_furni.py` script, you will need to have downloaded data from at least **Habbo.com** and **Habbo Spain**.
+### Running the Metadata-Only Pipeline
 
-**To run:**
-
-```bash
-python download_furni.py
-```
-
-You will be presented with an interactive menu to select the hotel. The resulting JSON files will be saved in the `habbo_furni_data/` folder.
-
-### Step 2: Process the Data (`process_furni.py`)
-
-This script takes the `COM_furnis.json` and `ES_furnis.json` files from the `habbo_furni_data/` directory, merges them, and organizes the output.
-
-**Prerequisites:** You must have already downloaded the data for Habbo.com (option 1) and Habbo Spain (option 3) using the download script.
-
-**What it does:**
--   It uses each furni from `COM_furnis.json` as the base.
--   It finds the corresponding furni in `ES_furnis.json` using the `classname`.
--   It adds `name_es` and `description_es` fields to the furni data object.
--   It creates a new folder inside `furni_database/` named after the furni's `classname`.
--   It saves a `data.json` file with the complete, merged information inside that folder.
-
-**To run:**
+This is the default behavior. It will execute Steps 1 and 2, creating a database of `data.json` files without any SWFs or icons.
 
 ```bash
-python process_furni.py
+python main.py
 ```
 
-#### Example Output
+### Enabling Asset Downloads
 
-After processing, each furni will have its own `data.json` file inside its respective folder (e.g., `furni_database/shelves_norja/`). The structure of this file will look like this, now including the Spanish translations:
+Use the `--download-swf` and `--download-icons` flags to download the assets in Step 3. You can use either one or both.
 
-```json
-{
-  "id": 1,
-  "classname": "shelves_norja",
-  "created_at": "2024-08-31T23:40:51.000000Z",
-  "updated_at": "2024-08-31T23:40:51.000000Z",
-  "hotelData": {
-    "id": 30063,
-    "classname": "shelves_norja",
-    "hotel_id": 1,
-    "type": "room",
-    "name": "Iced Shelf",
-    "description": "For your stuff.",
-    "name_es": "Estanteria",
-    "description_es": "Para colocar tus emociones",
-    "revision": 61856,
-    "category": "shelf",
-    "furni_line": "iced",
-    "icon": {
-      "exists": true,
-      "url": "https://habbofurni.com/furni_assets/61856/shelves_norja_icon.png",
-      "path": "61856/shelves_norja_icon.png"
-    }
-    // ... other hotelData fields
-  },
-  "swf_data": {
-    // ... swf_data fields
-  }
-}
+```bash
+# Download metadata, process it, AND download both SWFs and icons
+python main.py --download-swf --download-icons
+```
+
+### Specifying Custom Output Folders
+
+You can control where the data is saved using the `--raw-dir` and `--database-dir` flags.
+
+```bash
+python main.py --raw-dir "D:/habbo/raw" --database-dir "D:/habbo/database" --download-swf
+```
+
+### Skipping Steps
+
+If you have already completed some steps, use `--start-at` to resume the pipeline.
+
+```bash
+# You already have raw data, now process it and download icons
+python main.py --start-at 2 --download-icons
+
+# You have a processed database, just download the missing SWFs
+python main.py --start-at 3 --download-swf
+```
+
+### Pipeline Steps Explained
+
+-   **Step 1: Fetch Metadata**: Downloads `COM_furnis.json` and `ES_furnis.json` from the API into the `--raw-dir`.
+-   **Step 2: Process Metadata**: Reads the raw JSONs, merges them, and creates a folder for each furni inside the `--database-dir`. Each folder contains a `data.json` file.
+-   **Step 3: Download Assets (Optional)**: If enabled via flags, this step scans every folder in the `--database-dir`, reads its `data.json`, and downloads the corresponding SWF and/or icon files into that same folder.
+
+#### Final Output Example
+
+After a full run with asset downloads enabled, a folder for a single furni will look like this:
+
+```
+assets/furni_database/shelves_norja/
+├── data.json              (Merged COM and ES metadata)
+├── shelves_norja.swf      (Downloaded if --download-swf was used)
+└── shelves_norja_icon.png (Downloaded if --download-icons was used)
 ```

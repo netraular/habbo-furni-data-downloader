@@ -4,32 +4,34 @@ import os
 import json
 import requests
 import time
+from pathlib import Path
 
 # --- CONFIGURATION ---
-# The directory where process_furni.py saved its output
-BASE_DIR = "furni_database"
-# Be polite to the server, wait a small amount of time between downloads
 DOWNLOAD_DELAY_SECONDS = 0.2
 
-def download_all_assets():
+def download_all_assets(database_dir: Path, download_swfs: bool, download_icons: bool):
     """
-    Iterates through all the furni folders in the base directory,
-    reads their data.json, and downloads the associated SWF and icon files.
+    Iterates through furni folders, reads their data.json, and conditionally
+    downloads the associated SWF and icon files based on the flags provided.
     """
+    if not download_swfs and not download_icons:
+        print("Asset download skipped as no asset types were requested.")
+        return
+
     print("Starting asset download script...")
     
-    if not os.path.exists(BASE_DIR):
-        print(f"❌ ERROR: The directory '{BASE_DIR}' was not found.")
-        print("Please run process_furni.py first to generate the database structure.")
+    if not database_dir.exists():
+        print(f"❌ ERROR: The directory '{database_dir}' was not found.")
+        print("Please run the processing step first to generate the database structure.")
         return
 
     # Get a list of all furni folders
     try:
-        furni_folders = [d for d in os.listdir(BASE_DIR) if os.path.isdir(os.path.join(BASE_DIR, d))]
+        furni_folders = [d for d in os.listdir(database_dir) if os.path.isdir(database_dir / d)]
         total_furni = len(furni_folders)
-        print(f"Found {total_furni} furni folders to process.\n")
+        print(f"Found {total_furni} furni folders to process in '{database_dir}'.\n")
     except FileNotFoundError:
-        print(f"❌ ERROR: The directory '{BASE_DIR}' seems to be empty or missing.")
+        print(f"❌ ERROR: The directory '{database_dir}' seems to be empty or missing.")
         return
 
     # Counters for the final summary
@@ -40,8 +42,8 @@ def download_all_assets():
 
     # Process each folder
     for i, folder_name in enumerate(furni_folders):
-        furni_folder_path = os.path.join(BASE_DIR, folder_name)
-        data_json_path = os.path.join(furni_folder_path, "data.json")
+        furni_folder_path = database_dir / folder_name
+        data_json_path = furni_folder_path / "data.json"
 
         print(f"[{i+1}/{total_furni}] Processing '{folder_name}'...")
 
@@ -53,51 +55,53 @@ def download_all_assets():
             with open(data_json_path, 'r', encoding='utf-8') as f:
                 furni_data = json.load(f)
 
-            # --- Download SWF ---
-            swf_info = furni_data.get("hotelData", {}).get("swf", {})
-            if swf_info.get("exists") and swf_info.get("url"):
-                file_url = swf_info["url"]
-                file_name = os.path.basename(file_url) # Extracts "fireplace_armas.swf"
-                output_path = os.path.join(furni_folder_path, file_name)
+            # --- Download SWF (Conditional) ---
+            if download_swfs:
+                swf_info = furni_data.get("hotelData", {}).get("swf", {})
+                if swf_info.get("exists") and swf_info.get("url"):
+                    file_url = swf_info["url"]
+                    file_name = os.path.basename(file_url)
+                    output_path = furni_folder_path / file_name
 
-                if not os.path.exists(output_path):
-                    try:
-                        response = requests.get(file_url, timeout=10)
-                        response.raise_for_status()
-                        with open(output_path, 'wb') as out_file:
-                            out_file.write(response.content)
-                        print(f"  ✔️ Downloaded SWF: {file_name}")
-                        downloaded_swfs += 1
-                        time.sleep(DOWNLOAD_DELAY_SECONDS) # Wait after a successful download
-                    except requests.exceptions.RequestException as e:
-                        print(f"  ❌ Error downloading SWF {file_url}: {e}")
-                        error_count += 1
-                else:
-                    print(f"  ⏩ SWF already exists. Skipping.")
-                    skipped_files += 1
+                    if not os.path.exists(output_path):
+                        try:
+                            response = requests.get(file_url, timeout=10)
+                            response.raise_for_status()
+                            with open(output_path, 'wb') as out_file:
+                                out_file.write(response.content)
+                            print(f"  ✔️ Downloaded SWF: {file_name}")
+                            downloaded_swfs += 1
+                            time.sleep(DOWNLOAD_DELAY_SECONDS)
+                        except requests.exceptions.RequestException as e:
+                            print(f"  ❌ Error downloading SWF {file_url}: {e}")
+                            error_count += 1
+                    else:
+                        print(f"  ⏩ SWF already exists. Skipping.")
+                        skipped_files += 1
             
-            # --- Download Icon (Bonus) ---
-            icon_info = furni_data.get("hotelData", {}).get("icon", {})
-            if icon_info.get("exists") and icon_info.get("url"):
-                file_url = icon_info["url"]
-                file_name = os.path.basename(file_url) # Extracts "fireplace_armas_icon.png"
-                output_path = os.path.join(furni_folder_path, file_name)
+            # --- Download Icon (Conditional) ---
+            if download_icons:
+                icon_info = furni_data.get("hotelData", {}).get("icon", {})
+                if icon_info.get("exists") and icon_info.get("url"):
+                    file_url = icon_info["url"]
+                    file_name = os.path.basename(file_url)
+                    output_path = furni_folder_path / file_name
 
-                if not os.path.exists(output_path):
-                    try:
-                        response = requests.get(file_url, timeout=10)
-                        response.raise_for_status()
-                        with open(output_path, 'wb') as out_file:
-                            out_file.write(response.content)
-                        print(f"  ✔️ Downloaded Icon: {file_name}")
-                        downloaded_icons += 1
-                        time.sleep(DOWNLOAD_DELAY_SECONDS) # Wait after a successful download
-                    except requests.exceptions.RequestException as e:
-                        print(f"  ❌ Error downloading Icon {file_url}: {e}")
-                        error_count += 1
-                else:
-                    print(f"  ⏩ Icon already exists. Skipping.")
-                    skipped_files += 1
+                    if not os.path.exists(output_path):
+                        try:
+                            response = requests.get(file_url, timeout=10)
+                            response.raise_for_status()
+                            with open(output_path, 'wb') as out_file:
+                                out_file.write(response.content)
+                            print(f"  ✔️ Downloaded Icon: {file_name}")
+                            downloaded_icons += 1
+                            time.sleep(DOWNLOAD_DELAY_SECONDS)
+                        except requests.exceptions.RequestException as e:
+                            print(f"  ❌ Error downloading Icon {file_url}: {e}")
+                            error_count += 1
+                    else:
+                        print(f"  ⏩ Icon already exists. Skipping.")
+                        skipped_files += 1
 
         except (json.JSONDecodeError, KeyError) as e:
             print(f"  ❌ Error processing 'data.json' in '{folder_name}': {e}")
@@ -105,12 +109,17 @@ def download_all_assets():
     
     print("\n" + "="*50)
     print("🎉 ASSET DOWNLOAD COMPLETE! 🎉")
-    print(f"Total SWFs downloaded: {downloaded_swfs}")
-    print(f"Total Icons downloaded: {downloaded_icons}")
+    if download_swfs:
+        print(f"Total SWFs downloaded: {downloaded_swfs}")
+    if download_icons:
+        print(f"Total Icons downloaded: {downloaded_icons}")
     print(f"Files already present (skipped): {skipped_files}")
     print(f"Errors encountered: {error_count}")
     print("="*50)
 
-
 if __name__ == "__main__":
-    download_all_assets()
+    # Allows running this script standalone with a default directory
+    print("Running download_assets.py as a standalone script.")
+    DEFAULT_DIR = Path("furni_database")
+    # By default, download both when run directly
+    download_all_assets(DEFAULT_DIR, download_swfs=True, download_icons=True)
